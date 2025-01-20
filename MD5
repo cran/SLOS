@@ -1,0 +1,16 @@
+7893772a6eb6fc7af56de660de992547 *DESCRIPTION
+e581385bf380b47fc9bf2163898f5b09 *LICENSE
+25bf152081180ba3996b6a833f165ba4 *NAMESPACE
+c026c3afba89d118a2baf6dbc96f1a5a *R/01-Prediction.R
+c37649fe433b828255863552dcd94c89 *R/02-Evaluation.R
+5c80ea4abb82f88e0832cb845c0deea1 *R/SampledData.R
+a3236470a2fcebaf0e6fbc5d5f055341 *R/zzz.R
+ac78aef3b5ea32d2cc101c8ada6b43d0 *data/SampledData.RData
+6a7943783b395e7be4831b58abba66b9 *inst/WORDLIST
+9fc6b0aafd8dd34d7d4000ff2abc846a *man/SLOS.Rd
+f7e9beeb14bc0d60d063c9da5a0da1fd *man/load_SLOSModel.Rd
+302d11f39ecadda4ef91cd8984defb0e *man/predict_and_evaluate.Rd
+9e9b635febfc0af94e3b3e73974beb1c *man/sampled_data.Rd
+1854a33d3194694243da36cad99c5c97 *tests/testthat.R
+768fb4a2fde0c942ec52d0697756ad7c *tests/testthat/test-Evaluation.R
+ed2eec1e4b55d1a3f8d3fc3f7a291807 *tests/testthat/test-Prediction.R
