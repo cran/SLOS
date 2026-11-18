@@ -1,0 +1,144 @@
+---
+title: "Getting started with SLOS"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with SLOS}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+# The code below needs an internet connection (pre-trained model) and/or several
+# minutes of model training, so it is shown but not evaluated when the vignette
+# is built.
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Overview
+
+The **standardized length of stay (SLOS)** of an intensive care unit (ICU) is
+the ratio between the length of stay observed in the unit and the length of
+stay expected for its patients:
+
+$$\mathrm{SLOS} = \frac{\sum \text{observed LoS}}{\sum \text{expected LoS}}$$
+
+A SLOS below 1 means that patients stay in the ICU for less time than expected
+given their case mix; above 1, for longer. The expected length of stay comes
+from a prediction model. **SLOS** offers two ways of getting one:
+
+1. use the **pre-trained model** (Section 2), or
+2. **train a new model** on your own data (Section 3).
+
+In both cases, `SLOS()` then turns patient-level predictions into unit-level
+results (Section 4).
+
+```{r load}
+library(SLOS)
+data(SampledData)   # loads `sampled_data`, 1000 anonymized admissions
+```
+
+## Using the pre-trained model
+
+`SLOS()` downloads the pre-trained model on first use (it needs an internet
+connection; the file is large, about 1.1 GB, so it can take a long time; the model is kept for the rest of the R
+session). `sampled_data` identifies each ICU in the column `UnitCode` and has
+the observed length of stay in `UnitLengthStay_trunc`.
+
+```{r pretrained}
+res <- SLOS(
+  data       = sampled_data,
+  icu_column = "UnitCode",
+  outcome    = "UnitLengthStay_trunc"
+)
+
+head(res$df_unit_slos)       # one row per ICU
+res$plot_SLOS_obs_prev       # observed vs. predicted LoS per ICU
+plot(res$funnel_plot)        # funnel plot
+```
+
+Patient-level predictions and error metrics are also available directly:
+
+```{r predict}
+pred <- slos_predict_pretrained(sampled_data, outcome = "UnitLengthStay_trunc")
+pred$RMSE
+```
+
+## Training a model with your own data
+
+The pre-trained model reflects the case mix and the data of the hospitals it
+was trained on. For other settings, build a new model. The workflow has four
+steps; a complete script is available in
+`system.file("examples", "retrain_workflow.R", package = "SLOS")`.
+
+**Step 1 – Pre-processing.** Removes near-zero variance predictors and highly
+correlated numeric or categorical predictors, splits the data into training and
+test sets and imputes missing values with *mice*.
+
+```{r preprocess}
+outcome <- "UnitLengthStay_trunc"
+non_predictors <- c("UnitLengthStay_days", "admissionid", "UnitCode")
+
+pp <- slos_pre_processing(
+  data = sampled_data, outcome = outcome,
+  corr_cutoff_num = 0.8, corr_cutoff_cat = 0.5,
+  do_impute = TRUE, include_outcome = TRUE, m = 1, maxit = 5, seed = 123
+)
+
+pp$removed                       # what was removed and why
+train_imp <- pp$imputation$train_completed
+test_imp  <- pp$imputation$test_completed
+```
+
+**Step 2 – Feature selection** (recursive feature elimination).
+
+```{r rfe}
+res_fs <- slos_feature_select_rfe(
+  data    = train_imp[, setdiff(names(train_imp), non_predictors)],
+  outcome = outcome, method = "treebag", cv_folds = 5, verbose = FALSE
+)
+res_fs$selected_vars
+```
+
+**Step 3 – Training.** A linear model and a random forest are stacked with a
+random-forest meta-learner.
+
+```{r train}
+keep_cols <- union(res_fs$selected_vars, outcome)
+
+fit <- slos_train_new_model(
+  train      = train_imp[, keep_cols],
+  test       = test_imp,
+  outcome    = outcome,
+  icu_column = "UnitCode"
+)
+fit$metrics        # patient-level and ICU-level RMSE, MAE and R2
+```
+
+**Step 4 – Evaluate the units with the new model.**
+
+```{r custom}
+res <- SLOS(test_imp, icu_column = "UnitCode", outcome = outcome, model = fit)
+```
+
+## Interpreting the results
+
+`res$df_unit_slos` contains, for each ICU, the number of admissions, the sums
+of observed and expected length of stay and the SLOS. Summaries of the
+distribution across units are straightforward to compute:
+
+```{r summary}
+slos_values <- res$df_unit_slos$SLOS
+
+sum(res$df_unit_slos$soma_los_obs) / sum(res$df_unit_slos$soma_los_esp)  # overall
+median(slos_values)
+quantile(slos_values, c(0.25, 0.75))
+```
+
+The funnel plot shows each unit's SLOS against its number of admissions with
+control limits around the overall SLOS; units outside the limits differ from
+the overall performance by more than chance would explain.
+
+## References
+
+Peres et al. (2022) <https://doi.org/10.1016/j.accpm.2022.101142>.
+Peres et al. (2023) <https://doi.org/10.1007/s00134-023-07255-w>.
